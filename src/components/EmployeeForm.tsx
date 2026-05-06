@@ -13,8 +13,10 @@ import {
   getVisibleMonths,
   getWeekdayFull,
   getWeekendDaysInMonth,
+  getWeekendPrioDays,
   isDeadlinePassed,
-  MAX_PRIO_POINTS,
+  WEEKEND_PRIO_MAX,
+  WEEKDAY_PRIO_MAX,
 } from '../lib/supabase'
 import { getNRWHolidays } from '../lib/holidays'
 
@@ -220,20 +222,6 @@ export default function EmployeeForm() {
   }
 
   // Stats: Verfügbar | Freizeit | Arbeitswünsche
-  const stats = useMemo(() => {
-    const count = daysInMonth(currentMonth || VISIBLE_MONTHS[2])
-    let verfuegbar = 0, freizeit = 0, arbeit = 0, prioUsed = 0
-    const freizeitSet = new Set(['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'])
-    for (let d = 1; d <= count; d++) {
-      const s = days[d]?.status ?? 'available'
-      if (s === 'available') verfuegbar++
-      else if (freizeitSet.has(s)) freizeit++
-      else arbeit++
-      prioUsed += days[d]?.prio ?? 0
-    }
-    return { verfuegbar, freizeit, arbeit, prioUsed }
-  }, [days, currentMonth])
-
   const holidays = useMemo(() => {
     if (!currentMonth) return {}
     const [year] = currentMonth.split('-').map(Number)
@@ -242,6 +230,23 @@ export default function EmployeeForm() {
 
   const weeks = useMemo(() => currentMonth ? buildWeeks(currentMonth) : [], [currentMonth])
   const weekendDays = useMemo(() => currentMonth ? getWeekendDaysInMonth(currentMonth) : new Set<number>(), [currentMonth])
+  const weekendPrioDays = useMemo(() => currentMonth ? getWeekendPrioDays(currentMonth) : new Set<number>(), [currentMonth])
+
+  const stats = useMemo(() => {
+    const count = daysInMonth(currentMonth || VISIBLE_MONTHS[2])
+    let verfuegbar = 0, freizeit = 0, arbeit = 0, weekendPrioUsed = 0, weekdayPrioUsed = 0
+    const freizeitSet = new Set(['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'])
+    for (let d = 1; d <= count; d++) {
+      const s = days[d]?.status ?? 'available'
+      if (s === 'available') verfuegbar++
+      else if (freizeitSet.has(s)) freizeit++
+      else arbeit++
+      const prio = days[d]?.prio ?? 0
+      if (weekendPrioDays.has(d)) weekendPrioUsed += prio
+      else weekdayPrioUsed += prio
+    }
+    return { verfuegbar, freizeit, arbeit, weekendPrioUsed, weekdayPrioUsed }
+  }, [days, currentMonth, weekendPrioDays])
   const currentIdx = VISIBLE_MONTHS.indexOf(currentMonth)
 
   useEffect(() => {
@@ -255,6 +260,10 @@ export default function EmployeeForm() {
   const selWeekdayFull = selectedDay && currentMonth ? getWeekdayFull(currentMonth, selectedDay) : ''
   const selIsUntouchedWeekend = selectedDay ? (weekendDays.has(selectedDay) && !touchedDays.has(selectedDay)) : false
   const selIsWeekend = selectedDay ? weekendDays.has(selectedDay) : false
+  const selIsWeekendPrioDay = selectedDay ? weekendPrioDays.has(selectedDay) : false
+  const selPrioMax = selIsWeekendPrioDay ? WEEKEND_PRIO_MAX : WEEKDAY_PRIO_MAX
+  const selPrioPoolUsed = selIsWeekendPrioDay ? stats.weekendPrioUsed : stats.weekdayPrioUsed
+  const selPrioLabel = selIsWeekendPrioDay ? 'Fr–So' : 'Mo–Do'
 
   const dayPanelRef = useRef<HTMLDivElement>(null)
   const totalDaysInMonth = currentMonth ? daysInMonth(currentMonth) : 31
@@ -446,22 +455,29 @@ export default function EmployeeForm() {
             </div>
           </div>
 
-          {/* Prio points bar */}
-          <div className={`rounded-xl border px-4 py-2.5 flex items-center justify-between ${
-            stats.prioUsed >= MAX_PRIO_POINTS ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⭐</span>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">Prio-Punkte</p>
-                <p className="text-xs text-gray-400">Für wichtige Wochenend-Tage</p>
+          {/* Prio points bars */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className={`rounded-xl border px-3 py-2 ${stats.weekendPrioUsed >= WEEKEND_PRIO_MAX ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
+              <p className="text-xs text-gray-500 font-medium">⭐ Prio Fr–So</p>
+              <p className={`text-xl font-bold ${stats.weekendPrioUsed >= WEEKEND_PRIO_MAX ? 'text-amber-600' : 'text-gray-800'}`}>
+                {stats.weekendPrioUsed} <span className="text-sm font-normal text-gray-400">/ {WEEKEND_PRIO_MAX}</span>
+              </p>
+              <div className="flex gap-0.5 mt-1">
+                {Array.from({ length: WEEKEND_PRIO_MAX }).map((_, i) => (
+                  <div key={i} className={`flex-1 h-1.5 rounded-full ${i < stats.weekendPrioUsed ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                ))}
               </div>
             </div>
-            <div className="text-right">
-              <p className={`text-2xl font-bold ${stats.prioUsed >= MAX_PRIO_POINTS ? 'text-amber-600' : 'text-gray-800'}`}>
-                {stats.prioUsed} <span className="text-base font-normal text-gray-400">/ {MAX_PRIO_POINTS}</span>
+            <div className={`rounded-xl border px-3 py-2 ${stats.weekdayPrioUsed >= WEEKDAY_PRIO_MAX ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
+              <p className="text-xs text-gray-500 font-medium">⭐ Prio Mo–Do</p>
+              <p className={`text-xl font-bold ${stats.weekdayPrioUsed >= WEEKDAY_PRIO_MAX ? 'text-amber-600' : 'text-gray-800'}`}>
+                {stats.weekdayPrioUsed} <span className="text-sm font-normal text-gray-400">/ {WEEKDAY_PRIO_MAX}</span>
               </p>
-              <p className="text-xs text-gray-400">{MAX_PRIO_POINTS - stats.prioUsed} verbleibend</p>
+              <div className="flex gap-0.5 mt-1">
+                {Array.from({ length: WEEKDAY_PRIO_MAX }).map((_, i) => (
+                  <div key={i} className={`flex-1 h-1.5 rounded-full ${i < stats.weekdayPrioUsed ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                ))}
+              </div>
             </div>
           </div>
 
@@ -547,66 +563,64 @@ export default function EmployeeForm() {
                 </button>
               </div>
 
-              {/* Weekend note + prio points */}
+              {/* Weekend note */}
               {selIsWeekend && !isLocked && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
-                    <span className="text-sm text-gray-500 flex-1">
-                      🏖️ Wochenende – normalerweise kein Dienst
-                    </span>
-                    {!selIsUntouchedWeekend && (
-                      <button type="button" onClick={() => clearWeekendDay(selectedDay)}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap">
-                        Eintrag löschen
-                      </button>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                  <span className="text-sm text-gray-500 flex-1">
+                    🏖️ Wochenende – normalerweise kein Dienst
+                  </span>
+                  {!selIsUntouchedWeekend && (
+                    <button type="button" onClick={() => clearWeekendDay(selectedDay)}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap">
+                      Eintrag löschen
+                    </button>
+                  )}
+                </div>
+              )}
 
-                  {/* Prio points control */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <p className="text-sm font-semibold text-amber-800">⭐ Prio-Punkte</p>
-                        <p className="text-xs text-amber-600">
-                          Noch {MAX_PRIO_POINTS - stats.prioUsed + (selData?.prio ?? 0)} verfügbar
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button type="button"
-                          onClick={() => setPrio(selectedDay, Math.max(0, (selData?.prio ?? 0) - 1))}
-                          disabled={(selData?.prio ?? 0) <= 0}
-                          className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
-                          −
-                        </button>
-                        <span className="text-2xl font-bold text-amber-700 min-w-[2ch] text-center">
-                          {selData?.prio ?? 0}
-                        </span>
-                        <button type="button"
-                          onClick={() => setPrio(selectedDay, Math.min(
-                            MAX_PRIO_POINTS,
-                            (selData?.prio ?? 0) + 1,
-                            (selData?.prio ?? 0) + (MAX_PRIO_POINTS - stats.prioUsed)
-                          ))}
-                          disabled={(selData?.prio ?? 0) >= MAX_PRIO_POINTS || stats.prioUsed >= MAX_PRIO_POINTS + (selData?.prio ?? 0)}
-                          className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
-                          +
-                        </button>
-                      </div>
+              {/* Prio points control – visible for ALL days */}
+              {!isLocked && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">⭐ Prio-Punkte ({selPrioLabel})</p>
+                      <p className="text-xs text-amber-600">
+                        {selPrioMax - selPrioPoolUsed + (selData?.prio ?? 0)} von {selPrioMax} verbleibend
+                      </p>
                     </div>
-                    {/* Points dots visualization */}
-                    <div className="flex gap-1 mt-1">
-                      {Array.from({ length: MAX_PRIO_POINTS }).map((_, i) => (
-                        <button key={i} type="button"
-                          onClick={() => {
-                            const newVal = i < (selData?.prio ?? 0) ? i : i + 1
-                            const max = (selData?.prio ?? 0) + (MAX_PRIO_POINTS - stats.prioUsed)
-                            setPrio(selectedDay, Math.min(newVal, max))
-                          }}
-                          className={`flex-1 h-3 rounded-full transition ${
-                            i < (selData?.prio ?? 0) ? 'bg-amber-400' : 'bg-amber-100'
-                          }`} />
-                      ))}
+                    <div className="flex items-center gap-3">
+                      <button type="button"
+                        onClick={() => setPrio(selectedDay, Math.max(0, (selData?.prio ?? 0) - 1))}
+                        disabled={(selData?.prio ?? 0) <= 0}
+                        className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
+                        −
+                      </button>
+                      <span className="text-2xl font-bold text-amber-700 min-w-[2ch] text-center">
+                        {selData?.prio ?? 0}
+                      </span>
+                      <button type="button"
+                        onClick={() => setPrio(selectedDay, Math.min(
+                          selPrioMax,
+                          (selData?.prio ?? 0) + 1,
+                          (selData?.prio ?? 0) + (selPrioMax - selPrioPoolUsed)
+                        ))}
+                        disabled={selPrioPoolUsed - (selData?.prio ?? 0) >= selPrioMax}
+                        className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
+                        +
+                      </button>
                     </div>
+                  </div>
+                  <div className="flex gap-1">
+                    {Array.from({ length: selPrioMax }).map((_, i) => (
+                      <button key={i} type="button"
+                        onClick={() => {
+                          const cur = selData?.prio ?? 0
+                          const newVal = i < cur ? i : i + 1
+                          const remaining = selPrioMax - selPrioPoolUsed + cur
+                          setPrio(selectedDay, Math.min(newVal, remaining, selPrioMax))
+                        }}
+                        className={`flex-1 h-3 rounded-full transition ${i < (selData?.prio ?? 0) ? 'bg-amber-400' : 'bg-amber-100'}`} />
+                    ))}
                   </div>
                 </div>
               )}

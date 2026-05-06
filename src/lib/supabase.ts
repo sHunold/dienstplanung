@@ -42,7 +42,20 @@ export interface AvailabilityEntry {
   submitted_at: string
 }
 
-export const MAX_PRIO_POINTS = 8
+export const WEEKEND_PRIO_MAX = 6  // Fr + Sa + So
+export const WEEKDAY_PRIO_MAX = 2  // Mo – Do
+
+// Fr/Sa/So days in month (for prio assignment)
+export function getWeekendPrioDays(monthStr: string): Set<number> {
+  const [year, month] = monthStr.split('-').map(Number)
+  const count = new Date(year, month, 0).getDate()
+  const result = new Set<number>()
+  for (let d = 1; d <= count; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (dow === 0 || dow === 5 || dow === 6) result.add(d) // Sun / Fri / Sat
+  }
+  return result
+}
 
 export const STATUS_LABELS: Record<Status, string> = {
   available:       'Verfügbar',

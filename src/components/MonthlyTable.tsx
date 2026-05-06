@@ -74,7 +74,7 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
                 return (
                   <td key={d}
                     style={{ backgroundColor: color, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                    className="text-center px-0.5 py-1 border border-white cursor-default"
+                    className="text-center px-0.5 py-1.5 border border-white cursor-default"
                     title={entry
                       ? `${STATUS_LABELS[entry.status]}${entry.priority_points ? ` ⭐${entry.priority_points}` : ''}${entry.notes ? ` – ${entry.notes}` : ''}`
                       : 'Keine Eingabe'}>
@@ -82,9 +82,11 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
                       {entry ? STATUS_SHORT[entry.status] : '–'}
                       {entry?.notes && !entry?.priority_points && <span className="opacity-50">*</span>}
                     </span>
-                    {entry?.priority_points ? (
-                      <span className="text-[8px] font-bold text-amber-700 leading-none">⭐{entry.priority_points}</span>
-                    ) : null}
+                    {(entry?.priority_points ?? 0) > 0 ? (
+                      <span className="inline-block bg-amber-300 text-amber-900 font-bold rounded px-0.5 leading-tight" style={{ fontSize: '7px' }}>
+                        ⭐{entry!.priority_points}
+                      </span>
+                    ) : <span className="block" style={{ height: '10px' }} />}
                   </td>
                 )
               })}
