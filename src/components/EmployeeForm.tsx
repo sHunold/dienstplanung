@@ -14,10 +14,11 @@ import {
   getWeekdayFull,
   getWeekendDaysInMonth,
   isDeadlinePassed,
+  MAX_PRIO_POINTS,
 } from '../lib/supabase'
 import { getNRWHolidays } from '../lib/holidays'
 
-type DayData = { status: Status; notes: string }
+type DayData = { status: Status; notes: string; prio: number }
 type Step = 'identify' | 'month-select' | 'availability' | 'submitting'
 
 interface MonthInfo {
@@ -46,7 +47,7 @@ const STATUS_ACTIVE_RING: Record<Status, string> = {
 function buildDefaultDays(month: string): Record<number, DayData> {
   const count = daysInMonth(month)
   const days: Record<number, DayData> = {}
-  for (let d = 1; d <= count; d++) days[d] = { status: 'available', notes: '' }
+  for (let d = 1; d <= count; d++) days[d] = { status: 'available', notes: '', prio: 0 }
   return days
 }
 
@@ -130,8 +131,8 @@ export default function EmployeeForm() {
     const base = buildDefaultDays(month)
     const touched = new Set<number>()
     const weekends = getWeekendDaysInMonth(month)
-    for (const e of (entries ?? []) as { day: number; status: Status; notes: string | null }[]) {
-      base[e.day] = { status: e.status, notes: e.notes ?? '' }
+    for (const e of (entries ?? []) as { day: number; status: Status; notes: string | null; priority_points: number }[]) {
+      base[e.day] = { status: e.status, notes: e.notes ?? '', prio: e.priority_points ?? 0 }
       touched.add(e.day)
     }
     // Weekdays are always "touched" (they have a meaningful default)
@@ -188,7 +189,7 @@ export default function EmployeeForm() {
     for (let d = 1; d <= count; d++) {
       if (!touchedDays.has(d)) continue   // skip untouched weekend days
       const day = days[d]
-      entries.push({ employee_id: employee.id, month: currentMonth, day: d, status: day.status, notes: day.notes.trim() || null })
+      entries.push({ employee_id: employee.id, month: currentMonth, day: d, status: day.status, notes: day.notes.trim() || null, priority_points: day.prio ?? 0 })
     }
     const { error } = await supabase.from('availability_entries').insert(entries)
     if (error) { setErrorMsg('Fehler beim Speichern.'); setStep('availability'); return }
@@ -205,7 +206,13 @@ export default function EmployeeForm() {
 
   function clearWeekendDay(day: number) {
     setTouchedDays(prev => { const s = new Set(prev); s.delete(day); return s })
-    setDays(prev => ({ ...prev, [day]: { status: 'available', notes: '' } }))
+    setDays(prev => ({ ...prev, [day]: { status: 'available', notes: '', prio: 0 } }))
+  }
+
+  function setPrio(day: number, prio: number) {
+    if (isLocked) return
+    setDays(prev => ({ ...prev, [day]: { ...prev[day], prio } }))
+    if (prio > 0) setTouchedDays(prev => new Set(prev).add(day))
   }
 
   function setNotes(day: number, notes: string) {
@@ -215,15 +222,16 @@ export default function EmployeeForm() {
   // Stats: Verfügbar | Freizeit | Arbeitswünsche
   const stats = useMemo(() => {
     const count = daysInMonth(currentMonth || VISIBLE_MONTHS[2])
-    let verfuegbar = 0, freizeit = 0, arbeit = 0
+    let verfuegbar = 0, freizeit = 0, arbeit = 0, prioUsed = 0
     const freizeitSet = new Set(['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'])
     for (let d = 1; d <= count; d++) {
       const s = days[d]?.status ?? 'available'
       if (s === 'available') verfuegbar++
       else if (freizeitSet.has(s)) freizeit++
       else arbeit++
+      prioUsed += days[d]?.prio ?? 0
     }
-    return { verfuegbar, freizeit, arbeit }
+    return { verfuegbar, freizeit, arbeit, prioUsed }
   }, [days, currentMonth])
 
   const holidays = useMemo(() => {
@@ -438,6 +446,25 @@ export default function EmployeeForm() {
             </div>
           </div>
 
+          {/* Prio points bar */}
+          <div className={`rounded-xl border px-4 py-2.5 flex items-center justify-between ${
+            stats.prioUsed >= MAX_PRIO_POINTS ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⭐</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Prio-Punkte</p>
+                <p className="text-xs text-gray-400">Für wichtige Wochenend-Tage</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-2xl font-bold ${stats.prioUsed >= MAX_PRIO_POINTS ? 'text-amber-600' : 'text-gray-800'}`}>
+                {stats.prioUsed} <span className="text-base font-normal text-gray-400">/ {MAX_PRIO_POINTS}</span>
+              </p>
+              <p className="text-xs text-gray-400">{MAX_PRIO_POINTS - stats.prioUsed} verbleibend</p>
+            </div>
+          </div>
+
           {/* Calendar grid */}
           <div className="bg-white rounded-2xl shadow overflow-hidden">
             <div className="grid grid-cols-7 bg-gray-800">
@@ -465,8 +492,13 @@ export default function EmployeeForm() {
                         ${isSelected ? `ring-2 ring-inset ${isUntouchedWeekend ? 'ring-gray-400' : STATUS_ACTIVE_RING[data.status]}` : ''}
                       `}>
                       {isHoliday && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-700" />}
-                      {hasNote && <span className="absolute top-0.5 left-0.5 text-[8px] leading-none">✏️</span>}
-                      <span className={`font-bold text-xs leading-none ${isUntouchedWeekend ? 'text-gray-400' : 'text-gray-900'}`}>{day}</span>
+                      {hasNote && !data.prio && <span className="absolute top-0.5 left-0.5 text-[8px] leading-none">✏️</span>}
+                      {data.prio > 0 && (
+                        <span className="absolute top-0 left-0 right-0 flex justify-center">
+                          <span className="text-[9px] font-bold text-amber-700 leading-tight">⭐{data.prio}</span>
+                        </span>
+                      )}
+                      <span className={`font-bold text-xs leading-none ${isUntouchedWeekend ? 'text-gray-400' : 'text-gray-900'} ${data.prio > 0 ? 'mt-2' : ''}`}>{day}</span>
                       {!isUntouchedWeekend && (
                         <span className="text-[8px] leading-tight text-gray-700 font-medium mt-0.5">
                           {STATUS_SHORT[data.status]}
@@ -515,18 +547,67 @@ export default function EmployeeForm() {
                 </button>
               </div>
 
-              {/* Weekend note + clear button */}
+              {/* Weekend note + prio points */}
               {selIsWeekend && !isLocked && (
-                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
-                  <span className="text-sm text-gray-500 flex-1">
-                    🏖️ Wochenende – normalerweise kein Dienst
-                  </span>
-                  {!selIsUntouchedWeekend && (
-                    <button type="button" onClick={() => clearWeekendDay(selectedDay)}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap">
-                      Eintrag löschen
-                    </button>
-                  )}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                    <span className="text-sm text-gray-500 flex-1">
+                      🏖️ Wochenende – normalerweise kein Dienst
+                    </span>
+                    {!selIsUntouchedWeekend && (
+                      <button type="button" onClick={() => clearWeekendDay(selectedDay)}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap">
+                        Eintrag löschen
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Prio points control */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800">⭐ Prio-Punkte</p>
+                        <p className="text-xs text-amber-600">
+                          Noch {MAX_PRIO_POINTS - stats.prioUsed + (selData?.prio ?? 0)} verfügbar
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button type="button"
+                          onClick={() => setPrio(selectedDay, Math.max(0, (selData?.prio ?? 0) - 1))}
+                          disabled={(selData?.prio ?? 0) <= 0}
+                          className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
+                          −
+                        </button>
+                        <span className="text-2xl font-bold text-amber-700 min-w-[2ch] text-center">
+                          {selData?.prio ?? 0}
+                        </span>
+                        <button type="button"
+                          onClick={() => setPrio(selectedDay, Math.min(
+                            MAX_PRIO_POINTS,
+                            (selData?.prio ?? 0) + 1,
+                            (selData?.prio ?? 0) + (MAX_PRIO_POINTS - stats.prioUsed)
+                          ))}
+                          disabled={(selData?.prio ?? 0) >= MAX_PRIO_POINTS || stats.prioUsed >= MAX_PRIO_POINTS + (selData?.prio ?? 0)}
+                          className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    {/* Points dots visualization */}
+                    <div className="flex gap-1 mt-1">
+                      {Array.from({ length: MAX_PRIO_POINTS }).map((_, i) => (
+                        <button key={i} type="button"
+                          onClick={() => {
+                            const newVal = i < (selData?.prio ?? 0) ? i : i + 1
+                            const max = (selData?.prio ?? 0) + (MAX_PRIO_POINTS - stats.prioUsed)
+                            setPrio(selectedDay, Math.min(newVal, max))
+                          }}
+                          className={`flex-1 h-3 rounded-full transition ${
+                            i < (selData?.prio ?? 0) ? 'bg-amber-400' : 'bg-amber-100'
+                          }`} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 

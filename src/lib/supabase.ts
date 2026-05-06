@@ -38,8 +38,11 @@ export interface AvailabilityEntry {
   day: number
   status: Status
   notes: string | null
+  priority_points: number
   submitted_at: string
 }
+
+export const MAX_PRIO_POINTS = 8
 
 export const STATUS_LABELS: Record<Status, string> = {
   available:       'Verfügbar',
