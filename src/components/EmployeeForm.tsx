@@ -5,6 +5,9 @@ import {
   type Employee,
   type MonthDeadline,
   STATUS_LABELS,
+  STATUS_GROUPS,
+  STATUS_BG_CLASS,
+  STATUS_SHORT,
   daysInMonth,
   formatMonthLabel,
   getVisibleMonths,
@@ -23,18 +26,20 @@ interface MonthInfo {
 }
 
 const WEEKDAY_HEADERS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+const VISIBLE_MONTHS = getVisibleMonths()
 
-const STATUS_BG: Record<Status, string> = {
-  available: 'bg-green-400',
-  unavailable: 'bg-red-400',
-  preferred_off: 'bg-yellow-300',
-}
 const STATUS_ACTIVE_RING: Record<Status, string> = {
-  available: 'ring-green-600',
-  unavailable: 'ring-red-600',
-  preferred_off: 'ring-yellow-500',
+  available:       'ring-green-600',
+  preferred_off:   'ring-yellow-500',
+  part_time_off:   'ring-amber-500',
+  vacation:        'ring-orange-600',
+  training:        'ring-sky-600',
+  overtime_off:    'ring-violet-600',
+  no_shift:        'ring-red-600',
+  no_late_shift:   'ring-rose-500',
+  normal:          'ring-emerald-500',
+  preferred_shift: 'ring-teal-500',
 }
-const CYCLE: Status[] = ['available', 'unavailable', 'preferred_off']
 
 function buildDefaultDays(month: string): Record<number, DayData> {
   const count = daysInMonth(month)
@@ -72,8 +77,6 @@ function formatDeadline(d: string): string {
   })
 }
 
-const VISIBLE_MONTHS = getVisibleMonths()
-
 export default function EmployeeForm() {
   const [step, setStep] = useState<Step>('identify')
   const [firstName, setFirstName] = useState('')
@@ -91,23 +94,15 @@ export default function EmployeeForm() {
   const [successMonth, setSuccessMonth] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
-  // ── Load month overview data ─────────────────────────────────
   const loadMonthInfos = useCallback(async (emp: Employee) => {
     setLoadingMonths(true)
     const [{ data: deadlines }, { data: entries }] = await Promise.all([
       supabase.from('month_deadlines').select('*'),
-      supabase
-        .from('availability_entries')
-        .select('month')
-        .eq('employee_id', emp.id),
+      supabase.from('availability_entries').select('month').eq('employee_id', emp.id),
     ])
-
     const deadlineMap: Record<string, string> = {}
-    for (const d of (deadlines ?? []) as MonthDeadline[]) {
-      deadlineMap[d.month] = d.deadline
-    }
+    for (const d of (deadlines ?? []) as MonthDeadline[]) deadlineMap[d.month] = d.deadline
     const submittedMonths = new Set((entries ?? []).map((e: { month: string }) => e.month))
-
     setMonthInfos(
       VISIBLE_MONTHS.map(m => ({
         month: m,
@@ -119,50 +114,31 @@ export default function EmployeeForm() {
     setLoadingMonths(false)
   }, [])
 
-  // ── Load calendar entries for a specific month ───────────────
   const loadCalendar = useCallback(async (emp: Employee, month: string) => {
     setLoadingCalendar(true)
     setSelectedDay(null)
-
-    const [{ data: entries }, { data: deadlines }] = await Promise.all([
-      supabase
-        .from('availability_entries')
-        .select('*')
-        .eq('employee_id', emp.id)
-        .eq('month', month),
-      supabase
-        .from('month_deadlines')
-        .select('*')
-        .eq('month', month)
-        .maybeSingle(),
+    const [{ data: entries }, { data: dl }] = await Promise.all([
+      supabase.from('availability_entries').select('*').eq('employee_id', emp.id).eq('month', month),
+      supabase.from('month_deadlines').select('*').eq('month', month).maybeSingle(),
     ])
-
-    const dl = (deadlines as MonthDeadline | null)?.deadline ?? null
-    setDeadline(dl)
-    setIsLocked(isDeadlinePassed(dl))
-
+    const deadline = (dl as MonthDeadline | null)?.deadline ?? null
+    setDeadline(deadline)
+    setIsLocked(isDeadlinePassed(deadline))
     const base = buildDefaultDays(month)
-    for (const entry of (entries ?? []) as {
-      day: number; status: Status; notes: string | null
-    }[]) {
-      base[entry.day] = { status: entry.status, notes: entry.notes ?? '' }
+    for (const e of (entries ?? []) as { day: number; status: Status; notes: string | null }[]) {
+      base[e.day] = { status: e.status, notes: e.notes ?? '' }
     }
     setDays(base)
     setLoadingCalendar(false)
   }, [])
 
-  // ── Identification ───────────────────────────────────────────
   async function handleIdentify(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg('')
     const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('first_name', firstName.trim())
-      .eq('last_name', lastName.trim())
-      .eq('date_of_birth', dob)
-      .single()
-
+      .from('employees').select('*')
+      .eq('first_name', firstName.trim()).eq('last_name', lastName.trim())
+      .eq('date_of_birth', dob).single()
     if (error || !data) {
       setErrorMsg('Name nicht gefunden – bitte wende dich an das Sekretariat.')
       return
@@ -173,7 +149,6 @@ export default function EmployeeForm() {
     setStep('month-select')
   }
 
-  // ── Open a month from the selection screen ───────────────────
   async function openMonth(month: string) {
     if (!employee) return
     setCurrentMonth(month)
@@ -181,7 +156,6 @@ export default function EmployeeForm() {
     await loadCalendar(employee, month)
   }
 
-  // ── Navigate prev / next month in calendar ───────────────────
   async function navigateMonth(direction: -1 | 1) {
     if (!employee) return
     const idx = VISIBLE_MONTHS.indexOf(currentMonth)
@@ -192,66 +166,45 @@ export default function EmployeeForm() {
     await loadCalendar(employee, newMonth)
   }
 
-  // ── Submit ───────────────────────────────────────────────────
   async function handleSubmit() {
     if (!employee || isLocked) return
     setStep('submitting')
-
-    await supabase
-      .from('availability_entries')
-      .delete()
-      .eq('employee_id', employee.id)
-      .eq('month', currentMonth)
-
+    await supabase.from('availability_entries').delete()
+      .eq('employee_id', employee.id).eq('month', currentMonth)
     const count = daysInMonth(currentMonth)
     const entries = []
     for (let d = 1; d <= count; d++) {
       const day = days[d]
-      entries.push({
-        employee_id: employee.id,
-        month: currentMonth,
-        day: d,
-        status: day.status,
-        notes: day.notes.trim() || null,
-      })
+      entries.push({ employee_id: employee.id, month: currentMonth, day: d, status: day.status, notes: day.notes.trim() || null })
     }
-
     const { error } = await supabase.from('availability_entries').insert(entries)
-    if (error) {
-      setErrorMsg('Fehler beim Speichern. Bitte versuche es erneut.')
-      setStep('availability')
-      return
-    }
-
+    if (error) { setErrorMsg('Fehler beim Speichern.'); setStep('availability'); return }
     setSuccessMonth(currentMonth)
     await loadMonthInfos(employee)
     setStep('month-select')
   }
 
-  // ── Day interactions ─────────────────────────────────────────
-  function cycleStatus(day: number) {
+  function setDayStatus(day: number, status: Status) {
     if (isLocked) return
-    setDays(prev => {
-      const current = prev[day]?.status ?? 'available'
-      const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length]
-      return { ...prev, [day]: { ...prev[day], status: next } }
-    })
+    setDays(prev => ({ ...prev, [day]: { ...prev[day], status } }))
   }
+
   function setNotes(day: number, notes: string) {
     setDays(prev => ({ ...prev, [day]: { ...prev[day], notes } }))
   }
 
-  // ── Stats ────────────────────────────────────────────────────
+  // Stats: Verfügbar | Freizeit | Arbeitswünsche
   const stats = useMemo(() => {
-    const count = daysInMonth(currentMonth || VISIBLE_MONTHS[0])
-    let v = 0, w = 0, n = 0
+    const count = daysInMonth(currentMonth || VISIBLE_MONTHS[2])
+    let verfuegbar = 0, freizeit = 0, arbeit = 0
+    const freizeitSet = new Set(['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'])
     for (let d = 1; d <= count; d++) {
       const s = days[d]?.status ?? 'available'
-      if (s === 'available') v++
-      else if (s === 'preferred_off') w++
-      else n++
+      if (s === 'available') verfuegbar++
+      else if (freizeitSet.has(s)) freizeit++
+      else arbeit++
     }
-    return { v, w, n }
+    return { verfuegbar, freizeit, arbeit }
   }, [days, currentMonth])
 
   const holidays = useMemo(() => {
@@ -260,22 +213,20 @@ export default function EmployeeForm() {
     return getNRWHolidays(year)
   }, [currentMonth])
 
-  const weeks = useMemo(
-    () => (currentMonth ? buildWeeks(currentMonth) : []),
-    [currentMonth],
-  )
-
+  const weeks = useMemo(() => currentMonth ? buildWeeks(currentMonth) : [], [currentMonth])
   const currentIdx = VISIBLE_MONTHS.indexOf(currentMonth)
 
-  // Auto-clear success flash after 4 s
   useEffect(() => {
     if (!successMonth) return
     const t = setTimeout(() => setSuccessMonth(null), 4000)
     return () => clearTimeout(t)
   }, [successMonth])
 
+  const selData = selectedDay ? (days[selectedDay] ?? { status: 'available' as Status, notes: '' }) : null
+  const holidayName = selectedDay ? (holidays[dateKey(currentMonth, selectedDay)] ?? null) : null
+
   // ════════════════════════════════════════════════════════════
-  // Identify step
+  // Identify
   // ════════════════════════════════════════════════════════════
   if (step === 'identify') {
     return (
@@ -317,7 +268,7 @@ export default function EmployeeForm() {
   }
 
   // ════════════════════════════════════════════════════════════
-  // Month selection step
+  // Month selection
   // ════════════════════════════════════════════════════════════
   if (step === 'month-select') {
     return (
@@ -329,158 +280,103 @@ export default function EmployeeForm() {
               <p className="text-blue-200 text-sm">Welchen Monat möchtest du bearbeiten?</p>
             </div>
             <button onClick={() => { setStep('identify'); setEmployee(null); setSuccessMonth(null) }}
-              className="text-blue-200 hover:text-white text-sm underline">
-              Abmelden
-            </button>
+              className="text-blue-200 hover:text-white text-sm underline">Abmelden</button>
           </div>
         </div>
-
         <div className="max-w-lg mx-auto p-4 space-y-3">
-          {/* Success flash */}
           {successMonth && (
             <div className="bg-green-100 border border-green-300 text-green-800 rounded-xl px-4 py-3 flex items-center gap-2">
               <span className="text-xl">✅</span>
-              <span className="font-medium">
-                {formatMonthLabel(successMonth)} wurde gespeichert!
-              </span>
+              <span className="font-medium">{formatMonthLabel(successMonth)} wurde gespeichert!</span>
             </div>
           )}
-
           {loadingMonths ? (
             <div className="text-center py-12 text-gray-400">Lade Monate …</div>
-          ) : (
-            monthInfos.map(info => (
-              <button
-                key={info.month}
-                onClick={() => openMonth(info.month)}
-                className={`w-full text-left bg-white rounded-xl shadow-sm border px-4 py-4 flex items-center justify-between transition hover:shadow-md ${
-                  info.isLocked ? 'border-gray-200 opacity-80' : 'border-gray-200 hover:border-blue-300'
-                } ${successMonth === info.month ? 'ring-2 ring-green-400' : ''}`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                    info.isLocked ? 'bg-gray-100' : info.hasSubmission ? 'bg-green-100' : 'bg-blue-50'
-                  }`}>
-                    {info.isLocked ? '🔒' : info.hasSubmission ? '✅' : '📅'}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-800">{formatMonthLabel(info.month)}</p>
-                    {info.isLocked ? (
-                      <p className="text-xs text-gray-400">
-                        Gesperrt seit {formatDeadline(info.deadline!)}
-                      </p>
-                    ) : info.deadline ? (
-                      <p className="text-xs text-orange-500">
-                        Frist: {formatDeadline(info.deadline)}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-400">
-                        {info.hasSubmission ? 'Eingereicht – noch änderbar' : 'Noch nicht eingereicht'}
-                      </p>
-                    )}
-                  </div>
+          ) : monthInfos.map(info => (
+            <button key={info.month} onClick={() => openMonth(info.month)}
+              className={`w-full text-left bg-white rounded-xl shadow-sm border px-4 py-4 flex items-center justify-between transition hover:shadow-md ${
+                info.isLocked ? 'border-gray-200 opacity-80' : 'border-gray-200 hover:border-blue-300'
+              } ${successMonth === info.month ? 'ring-2 ring-green-400' : ''}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                  info.isLocked ? 'bg-gray-100' : info.hasSubmission ? 'bg-green-100' : 'bg-blue-50'
+                }`}>
+                  {info.isLocked ? '🔒' : info.hasSubmission ? '✅' : '📅'}
                 </div>
-                <div className="flex items-center gap-2">
-                  {info.hasSubmission && !info.isLocked && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                      Eingereicht
-                    </span>
-                  )}
-                  {info.isLocked && (
-                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                      Nur lesen
-                    </span>
-                  )}
-                  <span className="text-gray-300 text-lg">›</span>
+                <div>
+                  <p className="font-semibold text-gray-800">{formatMonthLabel(info.month)}</p>
+                  {info.isLocked
+                    ? <p className="text-xs text-gray-400">Gesperrt seit {formatDeadline(info.deadline!)}</p>
+                    : info.deadline
+                    ? <p className="text-xs text-orange-500">Frist: {formatDeadline(info.deadline)}</p>
+                    : <p className="text-xs text-gray-400">{info.hasSubmission ? 'Eingereicht – noch änderbar' : 'Noch nicht eingereicht'}</p>}
                 </div>
-              </button>
-            ))
-          )}
+              </div>
+              <div className="flex items-center gap-2">
+                {info.hasSubmission && !info.isLocked && (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Eingereicht</span>
+                )}
+                {info.isLocked && (
+                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Nur lesen</span>
+                )}
+                <span className="text-gray-300 text-lg">›</span>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     )
   }
 
   // ════════════════════════════════════════════════════════════
-  // Availability calendar step
+  // Calendar
   // ════════════════════════════════════════════════════════════
-  const selData = selectedDay ? (days[selectedDay] ?? { status: 'available', notes: '' }) : null
-  const holidayName = selectedDay ? (holidays[dateKey(currentMonth, selectedDay)] ?? null) : null
-
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
-      {/* Header with month navigation */}
+      {/* Header */}
       <div className="bg-blue-700 text-white sticky top-0 z-20 shadow">
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <p className="font-semibold text-sm">{employee?.first_name} {employee?.last_name}</p>
             <button onClick={() => { setStep('month-select'); setSelectedDay(null) }}
-              className="text-blue-200 hover:text-white text-sm underline">
-              ← Monatsübersicht
-            </button>
+              className="text-blue-200 hover:text-white text-sm underline">← Monatsübersicht</button>
           </div>
-          {/* Month navigation row */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigateMonth(-1)}
-              disabled={currentIdx <= 0}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-600 disabled:opacity-30 transition text-lg"
-            >
-              ‹
-            </button>
+            <button onClick={() => navigateMonth(-1)} disabled={currentIdx <= 0}
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-600 disabled:opacity-30 transition text-lg">‹</button>
             <div className="text-center">
               <p className="font-bold text-lg leading-tight">{formatMonthLabel(currentMonth)}</p>
-              {isLocked && (
-                <p className="text-yellow-300 text-xs">🔒 Gesperrt – nur Ansicht</p>
-              )}
-              {!isLocked && deadline && (
-                <p className="text-orange-300 text-xs">Frist: {formatDeadline(deadline)}</p>
-              )}
+              {isLocked
+                ? <p className="text-yellow-300 text-xs">🔒 Gesperrt – nur Ansicht</p>
+                : deadline
+                ? <p className="text-orange-300 text-xs">Frist: {formatDeadline(deadline)}</p>
+                : null}
             </div>
-            <button
-              onClick={() => navigateMonth(1)}
-              disabled={currentIdx >= VISIBLE_MONTHS.length - 1}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-600 disabled:opacity-30 transition text-lg"
-            >
-              ›
-            </button>
+            <button onClick={() => navigateMonth(1)} disabled={currentIdx >= VISIBLE_MONTHS.length - 1}
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-600 disabled:opacity-30 transition text-lg">›</button>
           </div>
         </div>
-
-        {/* Month dots nav */}
         <div className="flex justify-center gap-1.5 pb-2">
           {VISIBLE_MONTHS.map(m => {
             const info = monthInfos.find(mi => mi.month === m)
             return (
-              <button
-                key={m}
-                onClick={() => openMonth(m)}
+              <button key={m} onClick={() => openMonth(m)}
                 className={`w-2 h-2 rounded-full transition-all ${
-                  m === currentMonth
-                    ? 'bg-white scale-125'
-                    : info?.isLocked
-                    ? 'bg-yellow-400 opacity-70'
-                    : info?.hasSubmission
-                    ? 'bg-green-400 opacity-80'
-                    : 'bg-blue-400'
-                }`}
-                title={formatMonthLabel(m)}
-              />
+                  m === currentMonth ? 'bg-white scale-125'
+                  : info?.isLocked ? 'bg-yellow-400 opacity-70'
+                  : info?.hasSubmission ? 'bg-green-400 opacity-80'
+                  : 'bg-blue-400'
+                }`} title={formatMonthLabel(m)} />
             )
           })}
         </div>
       </div>
 
-      {/* Lock banner */}
       {isLocked && (
         <div className="max-w-lg mx-auto px-3 pt-3">
           <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 rounded-xl px-4 py-3 text-sm flex items-start gap-2">
             <span className="text-lg shrink-0">🔒</span>
-            <span>
-              Die Abgabefrist für diesen Monat war der{' '}
-              <strong>{formatDeadline(deadline!)}</strong>. Du kannst deine
-              Einträge nur noch ansehen, aber nicht mehr ändern.
-            </span>
+            <span>Die Abgabefrist war der <strong>{formatDeadline(deadline!)}</strong>. Nur Ansicht möglich.</span>
           </div>
         </div>
       )}
@@ -489,35 +385,27 @@ export default function EmployeeForm() {
         <div className="text-center py-16 text-gray-400">Lade Kalender …</div>
       ) : (
         <div className="max-w-lg mx-auto px-3 pt-4 space-y-4">
-          {/* Stats bar */}
+          {/* Stats */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-green-100 border border-green-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-green-700">{stats.v}</p>
+              <p className="text-2xl font-bold text-green-700">{stats.verfuegbar}</p>
               <p className="text-xs text-green-600 font-medium">Verfügbar</p>
             </div>
-            <div className="bg-yellow-100 border border-yellow-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-yellow-700">{stats.w}</p>
-              <p className="text-xs text-yellow-600 font-medium">Wunschfrei</p>
+            <div className="bg-orange-100 border border-orange-300 rounded-xl py-2">
+              <p className="text-2xl font-bold text-orange-700">{stats.freizeit}</p>
+              <p className="text-xs text-orange-600 font-medium">Freizeit</p>
             </div>
-            <div className="bg-red-100 border border-red-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-red-700">{stats.n}</p>
-              <p className="text-xs text-red-600 font-medium">Nicht verfügbar</p>
+            <div className="bg-blue-100 border border-blue-300 rounded-xl py-2">
+              <p className="text-2xl font-bold text-blue-700">{stats.arbeit}</p>
+              <p className="text-xs text-blue-600 font-medium">Arbeitswunsch</p>
             </div>
           </div>
-
-          {!isLocked && (
-            <p className="text-center text-xs text-gray-400">
-              Antippen → auswählen · nochmal antippen → Status wechseln
-            </p>
-          )}
 
           {/* Calendar grid */}
           <div className="bg-white rounded-2xl shadow overflow-hidden">
             <div className="grid grid-cols-7 bg-gray-800">
               {WEEKDAY_HEADERS.map(h => (
-                <div key={h} className={`text-center py-2 text-xs font-bold ${
-                  h === 'Sa' || h === 'So' ? 'text-blue-300' : 'text-white'
-                }`}>{h}</div>
+                <div key={h} className={`text-center py-2 text-xs font-bold ${h === 'Sa' || h === 'So' ? 'text-blue-300' : 'text-white'}`}>{h}</div>
               ))}
             </div>
             {weeks.map((week, wi) => (
@@ -527,35 +415,24 @@ export default function EmployeeForm() {
                   const key = dateKey(currentMonth, day)
                   const isWeekend = di >= 5
                   const isHoliday = key in holidays
-                  const data = days[day] ?? { status: 'available', notes: '' }
+                  const data = days[day] ?? { status: 'available' as Status, notes: '' }
                   const isSelected = selectedDay === day
                   const hasNote = data.notes.trim().length > 0
                   return (
-                    <button
-                      key={di}
-                      type="button"
-                      disabled={isLocked && !isSelected}
-                      onClick={() => {
-                        if (isLocked) { setSelectedDay(day); return }
-                        if (isSelected) cycleStatus(day)
-                        else setSelectedDay(day)
-                      }}
+                    <button key={di} type="button"
+                      onClick={() => setSelectedDay(isSelected ? null : day)}
                       className={`
                         relative flex flex-col items-center justify-center aspect-square transition-all select-none
-                        ${isLocked ? 'opacity-90 cursor-default' : ''}
-                        ${STATUS_BG[data.status]}
+                        ${STATUS_BG_CLASS[data.status]}
                         ${isSelected ? `ring-2 ring-inset ${STATUS_ACTIVE_RING[data.status]}` : ''}
                         ${isWeekend ? 'opacity-75' : ''}
-                      `}
-                    >
-                      {isHoliday && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-600" />}
+                      `}>
+                      {isHoliday && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-700" />}
                       {hasNote && <span className="absolute top-0.5 left-0.5 text-[8px] leading-none">✏️</span>}
-                      <span className="font-bold text-sm leading-none text-gray-900">{day}</span>
-                      {isHoliday && (
-                        <span className="text-[7px] leading-tight text-purple-800 font-medium text-center px-0.5 mt-0.5 max-w-full truncate">
-                          {holidays[key].split(' ')[0]}
-                        </span>
-                      )}
+                      <span className="font-bold text-xs leading-none text-gray-900">{day}</span>
+                      <span className="text-[8px] leading-tight text-gray-700 font-medium mt-0.5">
+                        {STATUS_SHORT[data.status]}
+                      </span>
                     </button>
                   )
                 })}
@@ -563,71 +440,88 @@ export default function EmployeeForm() {
             ))}
           </div>
 
-          {/* Selected day detail panel */}
+          {/* Selected day panel */}
           {selectedDay && selData && (
-            <div className="bg-white rounded-2xl shadow p-4 space-y-3">
+            <div className="bg-white rounded-2xl shadow p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-gray-800">
                     {selectedDay}. {formatMonthLabel(currentMonth).split(' ')[0]}
                     {holidayName && <span className="ml-2 text-purple-600 text-sm font-normal">🎉 {holidayName}</span>}
                   </p>
-                  {isLocked
-                    ? <p className="text-xs text-gray-400">Nur Ansicht</p>
-                    : <p className="text-xs text-gray-400">Antippen zum Wechseln</p>}
+                  <p className="text-xs text-gray-400">{isLocked ? 'Nur Ansicht' : 'Status auswählen'}</p>
                 </div>
                 <button type="button" onClick={() => setSelectedDay(null)}
                   className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {(['available', 'unavailable', 'preferred_off'] as Status[]).map(s => (
-                  <button
-                    key={s} type="button"
-                    disabled={isLocked}
-                    onClick={() => !isLocked && setDays(prev => ({ ...prev, [selectedDay]: { ...prev[selectedDay], status: s } }))}
-                    className={`py-2 rounded-lg text-sm font-medium transition border-2 ${
-                      selData.status === s
-                        ? `${STATUS_BG[s]} border-transparent text-gray-900 shadow-sm`
-                        : 'bg-gray-50 border-gray-200 text-gray-400'
-                    } ${isLocked ? 'cursor-default' : ''}`}
-                  >
-                    {STATUS_LABELS[s]}
-                  </button>
-                ))}
-              </div>
+              {/* Default option */}
+              <button type="button" disabled={isLocked}
+                onClick={() => setDayStatus(selectedDay, 'available')}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition ${
+                  selData.status === 'available'
+                    ? 'bg-green-400 border-green-500 text-gray-900'
+                    : 'bg-gray-50 border-gray-200 text-gray-500'
+                } ${isLocked ? 'cursor-default' : ''}`}>
+                ✅ Verfügbar (Standard)
+              </button>
 
-              {!isLocked && (
+              {/* Grouped options */}
+              {STATUS_GROUPS.map(group => (
+                <div key={group.label}>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">{group.label}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.statuses.map(s => (
+                      <button key={s} type="button" disabled={isLocked}
+                        onClick={() => setDayStatus(selectedDay, s)}
+                        className={`py-2 px-3 rounded-xl text-sm font-medium border-2 transition text-left ${
+                          selData.status === s
+                            ? `${STATUS_BG_CLASS[s]} border-transparent text-gray-900 shadow-sm`
+                            : 'bg-gray-50 border-gray-200 text-gray-500'
+                        } ${isLocked ? 'cursor-default' : ''}`}>
+                        <span className="font-bold text-xs opacity-60 mr-1">[{STATUS_SHORT[s]}]</span>
+                        {STATUS_LABELS[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* Notes */}
+              {!isLocked ? (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Anmerkung (optional)</label>
                   <input type="text" value={selData.notes} onChange={e => setNotes(selectedDay, e.target.value)}
-                    placeholder="z. B. Urlaub, Fortbildung …"
+                    placeholder="z. B. Details zum Urlaub …"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                 </div>
-              )}
-              {isLocked && selData.notes && (
+              ) : selData.notes ? (
                 <p className="text-sm text-gray-500 italic">„{selData.notes}"</p>
-              )}
+              ) : null}
             </div>
           )}
 
           {/* Legend */}
-          <div className="flex gap-3 text-xs text-gray-400 justify-center flex-wrap">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-400 inline-block" /> Verfügbar</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-400 inline-block" /> Nicht verfügbar</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-300 inline-block" /> Wunschfrei</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-600 inline-block" /> Feiertag (NRW)</span>
+          <div className="bg-white rounded-xl shadow p-3">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Legende</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {(['available', 'preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off',
+                'no_shift', 'no_late_shift', 'normal', 'preferred_shift'] as Status[]).map(s => (
+                <div key={s} className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <span className={`w-3 h-3 rounded-sm shrink-0 ${STATUS_BG_CLASS[s]}`} />
+                  <span className="font-mono text-gray-400 text-[10px]">{STATUS_SHORT[s]}</span>
+                  <span>{STATUS_LABELS[s]}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Error */}
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm">{errorMsg}</div>
           )}
 
-          {/* Submit */}
           {!isLocked && (
-            <button type="button" onClick={handleSubmit}
-              disabled={step === 'submitting'}
+            <button type="button" onClick={handleSubmit} disabled={step === 'submitting'}
               className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition disabled:opacity-60">
               {step === 'submitting' ? 'Wird gespeichert …' : 'Verfügbarkeit absenden ✓'}
             </button>

@@ -5,7 +5,17 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export type Status = 'available' | 'unavailable' | 'preferred_off'
+export type Status =
+  | 'available'       // Verfügbar (default)
+  | 'preferred_off'   // Wunschfrei
+  | 'part_time_off'   // Teilzeitfrei
+  | 'vacation'        // Urlaub
+  | 'training'        // Fortbildung
+  | 'overtime_off'    // Freizeitausgleich (ÜSTD)
+  | 'no_shift'        // Kein Dienst
+  | 'no_late_shift'   // Kein Spätdienst
+  | 'normal'          // Normal / Egal
+  | 'preferred_shift' // Wunschdienst
 
 export interface Employee {
   id: string
@@ -32,15 +42,70 @@ export interface AvailabilityEntry {
 }
 
 export const STATUS_LABELS: Record<Status, string> = {
-  available: 'Verfügbar',
-  unavailable: 'Nicht verfügbar',
-  preferred_off: 'Wunschfrei',
+  available:       'Verfügbar',
+  preferred_off:   'Wunschfrei',
+  part_time_off:   'Teilzeitfrei',
+  vacation:        'Urlaub',
+  training:        'Fortbildung',
+  overtime_off:    'Freizeitausgleich',
+  no_shift:        'Kein Dienst',
+  no_late_shift:   'Kein Spätdienst',
+  normal:          'Normal / Egal',
+  preferred_shift: 'Wunschdienst',
 }
 
 export const STATUS_SHORT: Record<Status, string> = {
-  available: 'V',
-  unavailable: 'N',
-  preferred_off: 'W',
+  available:       'V',
+  preferred_off:   'WF',
+  part_time_off:   'TZ',
+  vacation:        'U',
+  training:        'FB',
+  overtime_off:    'ÜSTD',
+  no_shift:        'KD',
+  no_late_shift:   'KS',
+  normal:          'N/E',
+  preferred_shift: 'WD',
+}
+
+// Grouped for the employee form UI
+export const STATUS_GROUPS = [
+  {
+    label: 'Freizeit',
+    statuses: ['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'] as Status[],
+  },
+  {
+    label: 'Arbeitsoptionen',
+    statuses: ['no_shift', 'no_late_shift', 'normal', 'preferred_shift'] as Status[],
+  },
+]
+
+// Tailwind bg classes for calendar cells
+export const STATUS_BG_CLASS: Record<Status, string> = {
+  available:       'bg-green-400',
+  preferred_off:   'bg-yellow-300',
+  part_time_off:   'bg-amber-300',
+  vacation:        'bg-orange-400',
+  training:        'bg-sky-400',
+  overtime_off:    'bg-violet-400',
+  no_shift:        'bg-red-400',
+  no_late_shift:   'bg-rose-300',
+  normal:          'bg-emerald-300',
+  preferred_shift: 'bg-teal-400',
+}
+
+// ARGB hex for Excel export
+export const STATUS_EXCEL_COLOR: Record<Status | 'none', string> = {
+  available:       'FF86EFAC',
+  preferred_off:   'FFFDE68A',
+  part_time_off:   'FFFCD34D',
+  vacation:        'FFFB923C',
+  training:        'FF7DD3FC',
+  overtime_off:    'FFC4B5FD',
+  no_shift:        'FFFCA5A5',
+  no_late_shift:   'FFFDA4AF',
+  normal:          'FF6EE7B7',
+  preferred_shift: 'FF5EEAD4',
+  none:            'FFE5E7EB',
 }
 
 export const WEEKDAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']

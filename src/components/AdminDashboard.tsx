@@ -6,6 +6,8 @@ import {
   type AvailabilityEntry,
   type Status,
   STATUS_SHORT,
+  STATUS_LABELS,
+  STATUS_EXCEL_COLOR,
   daysInMonth,
   formatMonthLabel,
   getAvailableMonths,
@@ -15,18 +17,6 @@ import MonthlyTable from './MonthlyTable'
 import EmployeeManager from './EmployeeManager'
 import DeadlineManager from './DeadlineManager'
 
-const EXCEL_COLORS: Record<Status | 'none', string> = {
-  available: 'FF86EFAC',    // green-300
-  unavailable: 'FFFCA5A5',  // red-300
-  preferred_off: 'FFFDE68A', // yellow-200
-  none: 'FFE5E7EB',          // gray-200
-}
-
-const STATUS_LABELS_FULL: Record<Status, string> = {
-  available: 'Verfügbar',
-  unavailable: 'Nicht verfügbar',
-  preferred_off: 'Wunschfrei',
-}
 
 export default function AdminDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -138,7 +128,7 @@ export default function AdminDashboard() {
           cell.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: EXCEL_COLORS[colorKey] },
+            fgColor: { argb: STATUS_EXCEL_COLOR[colorKey] },
           }
           cell.alignment = { vertical: 'middle', horizontal: 'center' }
           cell.border = {
@@ -153,16 +143,15 @@ export default function AdminDashboard() {
         }
       }
 
-      // Legend row
+      // Legend
       sheet.addRow([])
-      const legendTitles = ['Legende:', 'V = Verfügbar', 'N = Nicht verfügbar', 'W = Wunschfrei', '– = Keine Eingabe']
-      const legendRow = sheet.addRow(legendTitles)
+      const legendRow = sheet.addRow(['Legende:'])
       legendRow.getCell(1).font = { bold: true }
-      const legendColors: (Status | 'none')[] = ['none', 'available', 'unavailable', 'preferred_off', 'none']
-      legendColors.forEach((c, idx) => {
-        if (idx === 0) return
-        const cell = legendRow.getCell(idx + 1)
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_COLORS[c] } }
+      const legendStatuses: Status[] = ['available','preferred_off','part_time_off','vacation','training','overtime_off','no_shift','no_late_shift','normal','preferred_shift']
+      legendStatuses.forEach((s, i) => {
+        const cell = legendRow.getCell(i + 2)
+        cell.value = `${STATUS_SHORT[s]} = ${STATUS_LABELS[s]}`
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STATUS_EXCEL_COLOR[s] } }
       })
 
       // Column widths
@@ -192,7 +181,7 @@ export default function AdminDashboard() {
   }
 
   // Stats
-  const totalDays = daysInMonth(month)
+  const _totalDays = daysInMonth(month); void _totalDays
   const statsByStatus = entries.reduce(
     (acc, e) => {
       acc[e.status] = (acc[e.status] ?? 0) + 1
@@ -270,18 +259,13 @@ export default function AdminDashboard() {
           <StatCard
             label="Verfügbar"
             value={statsByStatus['available'] ?? 0}
-            sub={`von ${employees.length * totalDays} Feldern`}
+            sub="Einträge"
             color="green"
           />
           <StatCard
-            label="Nicht verfügbar"
-            value={statsByStatus['unavailable'] ?? 0}
-            sub="Einträge"
-            color="red"
-          />
-          <StatCard
-            label="Wunschfrei"
-            value={statsByStatus['preferred_off'] ?? 0}
+            label="Freizeit"
+            value={(['preferred_off','part_time_off','vacation','training','overtime_off'] as const)
+              .reduce((s, k) => s + (statsByStatus[k] ?? 0), 0)}
             sub="Einträge"
             color="yellow"
           />
@@ -308,25 +292,23 @@ export default function AdminDashboard() {
         )}
 
         {/* Legend */}
-        <div className="flex items-center gap-3 text-xs no-print">
-          <span className="text-gray-500 font-medium">Legende:</span>
-          <span className="inline-flex items-center gap-1">
-            <span className="w-4 h-4 rounded bg-green-200 inline-block" />
-            V = {STATUS_LABELS_FULL.available}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="w-4 h-4 rounded bg-red-200 inline-block" />
-            N = {STATUS_LABELS_FULL.unavailable}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="w-4 h-4 rounded bg-yellow-200 inline-block" />
-            W = {STATUS_LABELS_FULL.preferred_off}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="w-4 h-4 rounded bg-gray-200 inline-block" />
-            – = Keine Eingabe
-          </span>
-          <span className="text-gray-400">* = Anmerkung vorhanden (Hover)</span>
+        <div className="no-print bg-white rounded-xl shadow p-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+            <span className="text-gray-500 font-bold w-full">Legende:</span>
+            {(['available','preferred_off','part_time_off','vacation','training','overtime_off',
+              'no_shift','no_late_shift','normal','preferred_shift'] as Status[]).map(s => (
+              <span key={s} className="inline-flex items-center gap-1">
+                <span className={`w-3 h-3 rounded-sm inline-block`}
+                  style={{ backgroundColor: `#${STATUS_EXCEL_COLOR[s].slice(2)}` }} />
+                <span className="font-mono text-gray-400">{STATUS_SHORT[s]}</span>
+                = {STATUS_LABELS[s]}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1">
+              <span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" /> – = Keine Eingabe
+            </span>
+            <span className="text-gray-400">* = Anmerkung (Hover)</span>
+          </div>
         </div>
 
         {/* Main table */}

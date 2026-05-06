@@ -3,6 +3,7 @@ import {
   type AvailabilityEntry,
   type Status,
   STATUS_SHORT,
+  STATUS_LABELS,
   daysInMonth,
   getWeekday,
 } from '../lib/supabase'
@@ -13,32 +14,32 @@ interface Props {
   month: string
 }
 
-const CELL_BG: Record<Status, string> = {
-  available: 'bg-green-200 print-green',
-  unavailable: 'bg-red-200 print-red',
-  preferred_off: 'bg-yellow-200 print-yellow',
-}
-
-const CELL_TEXT: Record<Status, string> = {
-  available: 'text-green-800',
-  unavailable: 'text-red-800',
-  preferred_off: 'text-yellow-800',
+// Print-safe inline style colors (Tailwind print colors don't always work)
+const PRINT_COLORS: Record<Status | 'none', string> = {
+  available:       '#86efac',
+  preferred_off:   '#fde68a',
+  part_time_off:   '#fcd34d',
+  vacation:        '#fb923c',
+  training:        '#7dd3fc',
+  overtime_off:    '#c4b5fd',
+  no_shift:        '#fca5a5',
+  no_late_shift:   '#fda4af',
+  normal:          '#6ee7b7',
+  preferred_shift: '#5eead4',
+  none:            '#e5e7eb',
 }
 
 export default function MonthlyTable({ employees, entries, month }: Props) {
   const count = daysInMonth(month)
   const days = Array.from({ length: count }, (_, i) => i + 1)
 
-  // Build lookup: employeeId → day → entry
   const lookup: Record<string, Record<number, AvailabilityEntry>> = {}
   for (const e of entries) {
     if (!lookup[e.employee_id]) lookup[e.employee_id] = {}
     lookup[e.employee_id][e.day] = e
   }
 
-  const sortedEmployees = [...employees].sort((a, b) =>
-    a.last_name.localeCompare(b.last_name, 'de'),
-  )
+  const sorted = [...employees].sort((a, b) => a.last_name.localeCompare(b.last_name, 'de'))
 
   return (
     <div className="overflow-x-auto rounded-xl shadow">
@@ -52,13 +53,8 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
               const wd = getWeekday(month, d)
               const isWeekend = wd === 'Sa' || wd === 'So'
               return (
-                <th
-                  key={d}
-                  className={`px-1 py-1 text-center font-medium min-w-[32px] ${
-                    isWeekend ? 'bg-gray-600' : 'bg-gray-800'
-                  }`}
-                >
-                  <div>{wd}</div>
+                <th key={d} className={`px-0.5 py-1 text-center font-medium min-w-[36px] ${isWeekend ? 'bg-gray-600' : 'bg-gray-800'}`}>
+                  <div className="text-[10px]">{wd}</div>
                   <div>{d}</div>
                 </th>
               )
@@ -66,55 +62,32 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
           </tr>
         </thead>
         <tbody>
-          {sortedEmployees.map((emp, i) => (
+          {sorted.map((emp, i) => (
             <tr key={emp.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              <td className={`sticky left-0 z-10 px-3 py-1.5 font-medium text-gray-800 border-r border-gray-200 ${
-                i % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-              }`}>
+              <td className={`sticky left-0 z-10 px-3 py-1.5 font-medium text-gray-800 border-r border-gray-200 text-xs ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                 {emp.last_name}, {emp.first_name}
               </td>
               {days.map(d => {
                 const entry = lookup[emp.id]?.[d]
-                if (!entry) {
-                  return (
-                    <td
-                      key={d}
-                      className="bg-gray-200 print-grey text-center px-0.5 py-1 border border-white"
-                      title="Keine Eingabe"
-                    >
-                      <span className="text-gray-500">–</span>
-                    </td>
-                  )
-                }
+                const status: Status | 'none' = entry?.status ?? 'none'
+                const color = PRINT_COLORS[status]
                 return (
-                  <td
-                    key={d}
-                    className={`text-center px-0.5 py-1 border border-white cursor-default ${CELL_BG[entry.status]}`}
-                    title={
-                      entry.notes
-                        ? `${STATUS_SHORT[entry.status]}: ${entry.notes}`
-                        : STATUS_SHORT[entry.status]
-                    }
-                  >
-                    <span className={`font-bold ${CELL_TEXT[entry.status]}`}>
-                      {STATUS_SHORT[entry.status]}
-                      {entry.notes && (
-                        <span className="ml-0.5 opacity-60">*</span>
-                      )}
+                  <td key={d}
+                    style={{ backgroundColor: color, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                    className="text-center px-0.5 py-1 border border-white cursor-default"
+                    title={entry ? `${STATUS_LABELS[entry.status]}${entry.notes ? ` – ${entry.notes}` : ''}` : 'Keine Eingabe'}>
+                    <span className="font-bold text-gray-800 text-[10px]">
+                      {entry ? STATUS_SHORT[entry.status] : '–'}
+                      {entry?.notes && <span className="opacity-50">*</span>}
                     </span>
                   </td>
                 )
               })}
             </tr>
           ))}
-          {sortedEmployees.length === 0 && (
+          {sorted.length === 0 && (
             <tr>
-              <td
-                colSpan={count + 1}
-                className="py-8 text-center text-gray-400"
-              >
-                Keine Mitarbeiter vorhanden.
-              </td>
+              <td colSpan={count + 1} className="py-8 text-center text-gray-400">Keine Mitarbeiter vorhanden.</td>
             </tr>
           )}
         </tbody>
