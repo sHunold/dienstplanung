@@ -455,30 +455,24 @@ export default function EmployeeForm() {
             </div>
           </div>
 
-          {/* Prio points bars */}
+          {/* Prio markers overview */}
           <div className="grid grid-cols-2 gap-2">
-            <div className={`rounded-xl border px-3 py-2 ${stats.weekendPrioUsed >= WEEKEND_PRIO_MAX ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
-              <p className="text-xs text-gray-500 font-medium">⭐ Prio Fr–So</p>
-              <p className={`text-xl font-bold ${stats.weekendPrioUsed >= WEEKEND_PRIO_MAX ? 'text-amber-600' : 'text-gray-800'}`}>
-                {stats.weekendPrioUsed} <span className="text-sm font-normal text-gray-400">/ {WEEKEND_PRIO_MAX}</span>
-              </p>
-              <div className="flex gap-0.5 mt-1">
-                {Array.from({ length: WEEKEND_PRIO_MAX }).map((_, i) => (
-                  <div key={i} className={`flex-1 h-1.5 rounded-full ${i < stats.weekendPrioUsed ? 'bg-amber-400' : 'bg-gray-200'}`} />
-                ))}
+            {[
+              { label: '⭐ Wichtig Fr–So', used: stats.weekendPrioUsed, max: WEEKEND_PRIO_MAX },
+              { label: '⭐ Wichtig Mo–Do', used: stats.weekdayPrioUsed, max: WEEKDAY_PRIO_MAX },
+            ].map(({ label, used, max }) => (
+              <div key={label} className={`rounded-xl border px-3 py-2 ${used >= max ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
+                <p className="text-xs text-gray-500 font-medium">{label}</p>
+                <p className={`text-xl font-bold ${used >= max ? 'text-amber-600' : 'text-gray-800'}`}>
+                  {used} <span className="text-sm font-normal text-gray-400">/ {max} Tage</span>
+                </p>
+                <div className="flex gap-1 mt-1.5">
+                  {Array.from({ length: max }).map((_, i) => (
+                    <div key={i} className={`flex-1 h-2 rounded-full ${i < used ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className={`rounded-xl border px-3 py-2 ${stats.weekdayPrioUsed >= WEEKDAY_PRIO_MAX ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
-              <p className="text-xs text-gray-500 font-medium">⭐ Prio Mo–Do</p>
-              <p className={`text-xl font-bold ${stats.weekdayPrioUsed >= WEEKDAY_PRIO_MAX ? 'text-amber-600' : 'text-gray-800'}`}>
-                {stats.weekdayPrioUsed} <span className="text-sm font-normal text-gray-400">/ {WEEKDAY_PRIO_MAX}</span>
-              </p>
-              <div className="flex gap-0.5 mt-1">
-                {Array.from({ length: WEEKDAY_PRIO_MAX }).map((_, i) => (
-                  <div key={i} className={`flex-1 h-1.5 rounded-full ${i < stats.weekdayPrioUsed ? 'bg-amber-400' : 'bg-gray-200'}`} />
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* Calendar grid */}
@@ -578,52 +572,31 @@ export default function EmployeeForm() {
                 </div>
               )}
 
-              {/* Prio points control – visible for ALL days */}
-              {!isLocked && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-semibold text-amber-800">⭐ Prio-Punkte ({selPrioLabel})</p>
-                      <p className="text-xs text-amber-600">
-                        {selPrioMax - selPrioPoolUsed + (selData?.prio ?? 0)} von {selPrioMax} verbleibend
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button type="button"
-                        onClick={() => setPrio(selectedDay, Math.max(0, (selData?.prio ?? 0) - 1))}
-                        disabled={(selData?.prio ?? 0) <= 0}
-                        className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
-                        −
-                      </button>
-                      <span className="text-2xl font-bold text-amber-700 min-w-[2ch] text-center">
-                        {selData?.prio ?? 0}
-                      </span>
-                      <button type="button"
-                        onClick={() => setPrio(selectedDay, Math.min(
-                          selPrioMax,
-                          (selData?.prio ?? 0) + 1,
-                          (selData?.prio ?? 0) + (selPrioMax - selPrioPoolUsed)
-                        ))}
-                        disabled={selPrioPoolUsed - (selData?.prio ?? 0) >= selPrioMax}
-                        className="w-9 h-9 rounded-full bg-white border border-amber-300 text-amber-700 font-bold text-lg flex items-center justify-center disabled:opacity-30 hover:bg-amber-100 transition">
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    {Array.from({ length: selPrioMax }).map((_, i) => (
-                      <button key={i} type="button"
-                        onClick={() => {
-                          const cur = selData?.prio ?? 0
-                          const newVal = i < cur ? i : i + 1
-                          const remaining = selPrioMax - selPrioPoolUsed + cur
-                          setPrio(selectedDay, Math.min(newVal, remaining, selPrioMax))
-                        }}
-                        className={`flex-1 h-3 rounded-full transition ${i < (selData?.prio ?? 0) ? 'bg-amber-400' : 'bg-amber-100'}`} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Prio toggle – visible for ALL days */}
+              {!isLocked && (() => {
+                const marked = (selData?.prio ?? 0) > 0
+                const poolFull = selPrioPoolUsed >= selPrioMax && !marked
+                return (
+                  <button type="button"
+                    onClick={() => setPrio(selectedDay, marked ? 0 : 1)}
+                    disabled={poolFull}
+                    className={`w-full py-3 rounded-xl font-semibold text-sm border-2 transition flex items-center justify-center gap-2 ${
+                      marked
+                        ? 'bg-amber-400 border-amber-500 text-amber-900'
+                        : poolFull
+                        ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-white border-amber-300 text-amber-700 hover:bg-amber-50'
+                    }`}>
+                    <span className="text-base">{marked ? '⭐' : '☆'}</span>
+                    {marked
+                      ? 'Als wichtig markiert – tippen zum Entfernen'
+                      : poolFull
+                      ? `Limit erreicht (${selPrioMax} von ${selPrioMax} ${selPrioLabel} markiert)`
+                      : `Als wichtig markieren (${selPrioMax - selPrioPoolUsed} von ${selPrioMax} ${selPrioLabel} frei)`
+                    }
+                  </button>
+                )
+              })()}
 
               {/* Default option */}
               <button type="button" disabled={isLocked}
