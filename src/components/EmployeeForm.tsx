@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   supabase,
   type Status,
@@ -225,6 +225,20 @@ export default function EmployeeForm() {
   const selData = selectedDay ? (days[selectedDay] ?? { status: 'available' as Status, notes: '' }) : null
   const holidayName = selectedDay ? (holidays[dateKey(currentMonth, selectedDay)] ?? null) : null
 
+  const dayPanelRef = useRef<HTMLDivElement>(null)
+  const totalDaysInMonth = currentMonth ? daysInMonth(currentMonth) : 31
+
+  function navigateDay(direction: -1 | 1) {
+    if (!selectedDay) return
+    const next = selectedDay + direction
+    if (next < 1 || next > totalDaysInMonth) return
+    setSelectedDay(next)
+    // Keep viewport at the panel after state update
+    requestAnimationFrame(() => {
+      dayPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
+
   // ════════════════════════════════════════════════════════════
   // Identify
   // ════════════════════════════════════════════════════════════
@@ -442,17 +456,36 @@ export default function EmployeeForm() {
 
           {/* Selected day panel */}
           {selectedDay && selData && (
-            <div className="bg-white rounded-2xl shadow p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
+            <div ref={dayPanelRef} className="bg-white rounded-2xl shadow p-4 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                {/* Prev day */}
+                <button type="button" onClick={() => navigateDay(-1)}
+                  disabled={selectedDay <= 1}
+                  className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition text-gray-600 text-lg font-bold">
+                  ‹
+                </button>
+
+                {/* Day info */}
+                <div className="flex-1 text-center">
                   <p className="font-semibold text-gray-800">
                     {selectedDay}. {formatMonthLabel(currentMonth).split(' ')[0]}
-                    {holidayName && <span className="ml-2 text-purple-600 text-sm font-normal">🎉 {holidayName}</span>}
+                    {holidayName && <span className="ml-1 text-purple-600 text-sm font-normal">🎉 {holidayName}</span>}
                   </p>
                   <p className="text-xs text-gray-400">{isLocked ? 'Nur Ansicht' : 'Status auswählen'}</p>
                 </div>
+
+                {/* Next day */}
+                <button type="button" onClick={() => navigateDay(1)}
+                  disabled={selectedDay >= totalDaysInMonth}
+                  className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-30 transition text-gray-600 text-lg font-bold">
+                  ›
+                </button>
+
+                {/* Close */}
                 <button type="button" onClick={() => setSelectedDay(null)}
-                  className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+                  className="w-7 h-7 shrink-0 flex items-center justify-center text-gray-400 hover:text-gray-600 text-base">
+                  ✕
+                </button>
               </div>
 
               {/* Default option */}
