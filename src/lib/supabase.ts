@@ -58,7 +58,7 @@ export function getWeekendPrioDays(monthStr: string): Set<number> {
 }
 
 export const STATUS_LABELS: Record<Status, string> = {
-  available:       'Verfügbar',
+  available:       'Normal',
   preferred_off:   'Wunschfrei',
   part_time_off:   'Teilzeitfrei',
   vacation:        'Urlaub',
@@ -71,7 +71,7 @@ export const STATUS_LABELS: Record<Status, string> = {
 }
 
 export const STATUS_SHORT: Record<Status, string> = {
-  available:       'V',
+  available:       'N',
   preferred_off:   'WF',
   part_time_off:   'TZ',
   vacation:        'U',
@@ -91,7 +91,7 @@ export const STATUS_GROUPS = [
   },
   {
     label: 'Arbeitsoptionen',
-    statuses: ['no_shift', 'no_late_shift', 'normal', 'preferred_shift'] as Status[],
+    statuses: ['no_shift', 'no_late_shift', 'preferred_shift'] as Status[],
   },
 ]
 

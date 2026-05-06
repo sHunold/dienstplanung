@@ -147,7 +147,7 @@ export default function AdminDashboard() {
       sheet.addRow([])
       const legendRow = sheet.addRow(['Legende:'])
       legendRow.getCell(1).font = { bold: true }
-      const legendStatuses: Status[] = ['available','preferred_off','part_time_off','vacation','training','overtime_off','no_shift','no_late_shift','normal','preferred_shift']
+      const legendStatuses: Status[] = ['available','preferred_off','part_time_off','vacation','training','overtime_off','no_shift','no_late_shift','preferred_shift']
       legendStatuses.forEach((s, i) => {
         const cell = legendRow.getCell(i + 2)
         cell.value = `${STATUS_SHORT[s]} = ${STATUS_LABELS[s]}`
@@ -296,7 +296,7 @@ export default function AdminDashboard() {
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
             <span className="text-gray-500 font-bold w-full">Legende:</span>
             {(['available','preferred_off','part_time_off','vacation','training','overtime_off',
-              'no_shift','no_late_shift','normal','preferred_shift'] as Status[]).map(s => (
+              'no_shift','no_late_shift','preferred_shift'] as Status[]).map(s => (
               <span key={s} className="inline-flex items-center gap-1">
                 <span className={`w-3 h-3 rounded-sm inline-block`}
                   style={{ backgroundColor: `#${STATUS_EXCEL_COLOR[s].slice(2)}` }} />

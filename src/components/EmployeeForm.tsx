@@ -650,7 +650,7 @@ export default function EmployeeForm() {
                     ? 'bg-green-400 border-green-500 text-gray-900'
                     : 'bg-gray-50 border-gray-200 text-gray-500'
                 } ${isLocked ? 'cursor-default' : ''}`}>
-                ✅ Verfügbar
+                ✅ Normal
               </button>
 
               {/* Grouped options */}
@@ -693,7 +693,7 @@ export default function EmployeeForm() {
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Legende</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               {(['available', 'preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off',
-                'no_shift', 'no_late_shift', 'normal', 'preferred_shift'] as Status[]).map(s => (
+                'no_shift', 'no_late_shift', 'preferred_shift'] as Status[]).map(s => (
                 <div key={s} className="flex items-center gap-1.5 text-xs text-gray-600">
                   <span className={`w-3 h-3 rounded-sm shrink-0 ${STATUS_BG_CLASS[s]}`} />
                   <span className="font-mono text-gray-400 text-[10px]">{STATUS_SHORT[s]}</span>
