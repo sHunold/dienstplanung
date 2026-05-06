@@ -184,17 +184,49 @@ export default function EmployeeForm() {
   async function handleSubmit() {
     if (!employee || isLocked) return
     setStep('submitting')
-    await supabase.from('availability_entries').delete()
-      .eq('employee_id', employee.id).eq('month', currentMonth)
+    setErrorMsg('')
+
+    const { error: delError } = await supabase
+      .from('availability_entries')
+      .delete()
+      .eq('employee_id', employee.id)
+      .eq('month', currentMonth)
+
+    if (delError) {
+      setErrorMsg(`Fehler beim Löschen: ${delError.message}`)
+      setStep('availability')
+      return
+    }
+
     const count = daysInMonth(currentMonth)
     const entries = []
     for (let d = 1; d <= count; d++) {
-      if (!touchedDays.has(d)) continue   // skip untouched weekend days
+      if (!touchedDays.has(d)) continue
       const day = days[d]
-      entries.push({ employee_id: employee.id, month: currentMonth, day: d, status: day.status, notes: day.notes.trim() || null, priority_points: day.prio ?? 0 })
+      entries.push({
+        employee_id: employee.id,
+        month: currentMonth,
+        day: d,
+        status: day.status,
+        notes: day.notes.trim() || null,
+        priority_points: day.prio ?? 0,
+      })
     }
+
+    if (entries.length === 0) {
+      setSuccessMonth(currentMonth)
+      await loadMonthInfos(employee)
+      setStep('month-select')
+      return
+    }
+
     const { error } = await supabase.from('availability_entries').insert(entries)
-    if (error) { setErrorMsg('Fehler beim Speichern.'); setStep('availability'); return }
+    if (error) {
+      setErrorMsg(`Fehler beim Speichern: ${error.message}`)
+      setStep('availability')
+      return
+    }
+
     setSuccessMonth(currentMonth)
     await loadMonthInfos(employee)
     setStep('month-select')
@@ -393,7 +425,7 @@ export default function EmployeeForm() {
     <div className="min-h-screen bg-gray-50 pb-10">
       {/* Header */}
       <div className="bg-blue-700 text-white sticky top-0 z-20 shadow">
-        <div className="max-w-lg mx-auto px-4 py-3">
+        <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <p className="font-semibold text-sm">{employee?.first_name} {employee?.last_name}</p>
             <button onClick={() => { setStep('month-select'); setSelectedDay(null) }}
@@ -431,7 +463,7 @@ export default function EmployeeForm() {
       </div>
 
       {isLocked && (
-        <div className="max-w-lg mx-auto px-3 pt-3">
+        <div className="max-w-5xl mx-auto px-3 pt-3">
           <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 rounded-xl px-4 py-3 text-sm flex items-start gap-2">
             <span className="text-lg shrink-0">🔒</span>
             <span>Die Abgabefrist war der <strong>{formatDeadline(deadline!)}</strong>. Nur Ansicht möglich.</span>
@@ -442,7 +474,11 @@ export default function EmployeeForm() {
       {loadingCalendar ? (
         <div className="text-center py-16 text-gray-400">Lade Kalender …</div>
       ) : (
-        <div className="max-w-lg mx-auto px-3 pt-4 space-y-4">
+        <div className="max-w-5xl mx-auto px-3 pt-4">
+          <div className="md:grid md:grid-cols-[minmax(0,1fr)_320px] md:gap-6 md:items-start">
+
+          {/* LEFT column: Stats + Prio + Calendar */}
+          <div className="space-y-4">
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-green-100 border border-green-300 rounded-xl py-2">
@@ -524,6 +560,10 @@ export default function EmployeeForm() {
               </div>
             ))}
           </div>
+          </div>{/* end LEFT column */}
+
+          {/* RIGHT column: Detail panel + Legend + Submit */}
+          <div className="space-y-4 md:sticky md:top-28">
 
           {/* Selected day panel */}
           {selectedDay && selData && (
@@ -673,6 +713,8 @@ export default function EmployeeForm() {
               {step === 'submitting' ? 'Wird gespeichert …' : 'Verfügbarkeit absenden ✓'}
             </button>
           )}
+          </div>{/* end RIGHT column */}
+          </div>{/* end grid */}
         </div>
       )}
     </div>
