@@ -324,7 +324,10 @@ export default function EmployeeForm() {
         <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-blue-800">Dienstplanung</h1>
-            <p className="text-gray-500 text-sm mt-1">Verfügbarkeit eintragen</p>
+            <p className="text-gray-500 text-sm mt-3">
+              Mit diesem Tool kannst du deine Dienste für die kommenden Monate einreichen.
+              Der finale Dienstplan wird wie gehabt von Hendrik veröffentlicht.
+            </p>
           </div>
           <form onSubmit={handleIdentify} className="space-y-4">
             <div>
@@ -366,7 +369,7 @@ export default function EmployeeForm() {
         <div className="bg-blue-700 text-white px-4 py-4">
           <div className="max-w-lg mx-auto flex items-center justify-between">
             <div>
-              <p className="font-bold text-lg">{employee?.first_name} {employee?.last_name}</p>
+              <p className="font-bold text-lg">Hi {employee?.first_name}! 👋</p>
               <p className="text-blue-200 text-sm">Welchen Monat möchtest du bearbeiten?</p>
             </div>
             <button onClick={() => { setStep('identify'); setEmployee(null); setSuccessMonth(null) }}
@@ -514,6 +517,9 @@ export default function EmployeeForm() {
               </div>
             ))}
           </div>
+
+          {/* Calendar hint */}
+          <p className="text-xs text-gray-400 text-center">Klicke auf einen Tag, um deinen Dienst zu bearbeiten.</p>
 
           {/* Calendar grid */}
           <div className="bg-white rounded-2xl shadow overflow-hidden">
