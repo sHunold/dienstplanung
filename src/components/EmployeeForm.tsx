@@ -475,7 +475,7 @@ export default function EmployeeForm() {
         <div className="text-center py-16 text-gray-400">Lade Kalender …</div>
       ) : (
         <div className="max-w-5xl mx-auto px-3 pt-4">
-          <div className="md:grid md:grid-cols-[minmax(0,1fr)_320px] md:gap-6 md:items-start">
+          <div className="md:grid md:grid-cols-2 md:gap-6 md:items-start">
 
           {/* LEFT column: Stats + Prio + Calendar */}
           <div className="space-y-4">
