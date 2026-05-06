@@ -11,6 +11,8 @@ import {
   daysInMonth,
   formatMonthLabel,
   getVisibleMonths,
+  getWeekdayFull,
+  getWeekendDaysInMonth,
   isDeadlinePassed,
 } from '../lib/supabase'
 import { getNRWHolidays } from '../lib/holidays'
@@ -91,6 +93,7 @@ export default function EmployeeForm() {
   const [isLocked, setIsLocked] = useState(false)
   const [deadline, setDeadline] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [touchedDays, setTouchedDays] = useState<Set<number>>(new Set())
   const [successMonth, setSuccessMonth] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -125,9 +128,18 @@ export default function EmployeeForm() {
     setDeadline(deadline)
     setIsLocked(isDeadlinePassed(deadline))
     const base = buildDefaultDays(month)
+    const touched = new Set<number>()
+    const weekends = getWeekendDaysInMonth(month)
     for (const e of (entries ?? []) as { day: number; status: Status; notes: string | null }[]) {
       base[e.day] = { status: e.status, notes: e.notes ?? '' }
+      touched.add(e.day)
     }
+    // Weekdays are always "touched" (they have a meaningful default)
+    const count = daysInMonth(month)
+    for (let d = 1; d <= count; d++) {
+      if (!weekends.has(d)) touched.add(d)
+    }
+    setTouchedDays(touched)
     setDays(base)
     setLoadingCalendar(false)
   }, [])
@@ -174,6 +186,7 @@ export default function EmployeeForm() {
     const count = daysInMonth(currentMonth)
     const entries = []
     for (let d = 1; d <= count; d++) {
+      if (!touchedDays.has(d)) continue   // skip untouched weekend days
       const day = days[d]
       entries.push({ employee_id: employee.id, month: currentMonth, day: d, status: day.status, notes: day.notes.trim() || null })
     }
@@ -187,6 +200,12 @@ export default function EmployeeForm() {
   function setDayStatus(day: number, status: Status) {
     if (isLocked) return
     setDays(prev => ({ ...prev, [day]: { ...prev[day], status } }))
+    setTouchedDays(prev => new Set(prev).add(day))
+  }
+
+  function clearWeekendDay(day: number) {
+    setTouchedDays(prev => { const s = new Set(prev); s.delete(day); return s })
+    setDays(prev => ({ ...prev, [day]: { status: 'available', notes: '' } }))
   }
 
   function setNotes(day: number, notes: string) {
@@ -214,6 +233,7 @@ export default function EmployeeForm() {
   }, [currentMonth])
 
   const weeks = useMemo(() => currentMonth ? buildWeeks(currentMonth) : [], [currentMonth])
+  const weekendDays = useMemo(() => currentMonth ? getWeekendDaysInMonth(currentMonth) : new Set<number>(), [currentMonth])
   const currentIdx = VISIBLE_MONTHS.indexOf(currentMonth)
 
   useEffect(() => {
@@ -224,6 +244,9 @@ export default function EmployeeForm() {
 
   const selData = selectedDay ? (days[selectedDay] ?? { status: 'available' as Status, notes: '' }) : null
   const holidayName = selectedDay ? (holidays[dateKey(currentMonth, selectedDay)] ?? null) : null
+  const selWeekdayFull = selectedDay && currentMonth ? getWeekdayFull(currentMonth, selectedDay) : ''
+  const selIsUntouchedWeekend = selectedDay ? (weekendDays.has(selectedDay) && !touchedDays.has(selectedDay)) : false
+  const selIsWeekend = selectedDay ? weekendDays.has(selectedDay) : false
 
   const dayPanelRef = useRef<HTMLDivElement>(null)
   const totalDaysInMonth = currentMonth ? daysInMonth(currentMonth) : 31
@@ -432,21 +455,23 @@ export default function EmployeeForm() {
                   const data = days[day] ?? { status: 'available' as Status, notes: '' }
                   const isSelected = selectedDay === day
                   const hasNote = data.notes.trim().length > 0
+                  const isUntouchedWeekend = isWeekend && !touchedDays.has(day)
                   return (
                     <button key={di} type="button"
                       onClick={() => setSelectedDay(isSelected ? null : day)}
                       className={`
                         relative flex flex-col items-center justify-center aspect-square transition-all select-none
-                        ${STATUS_BG_CLASS[data.status]}
-                        ${isSelected ? `ring-2 ring-inset ${STATUS_ACTIVE_RING[data.status]}` : ''}
-                        ${isWeekend ? 'opacity-75' : ''}
+                        ${isUntouchedWeekend ? 'bg-gray-200' : STATUS_BG_CLASS[data.status]}
+                        ${isSelected ? `ring-2 ring-inset ${isUntouchedWeekend ? 'ring-gray-400' : STATUS_ACTIVE_RING[data.status]}` : ''}
                       `}>
                       {isHoliday && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-purple-700" />}
                       {hasNote && <span className="absolute top-0.5 left-0.5 text-[8px] leading-none">✏️</span>}
-                      <span className="font-bold text-xs leading-none text-gray-900">{day}</span>
-                      <span className="text-[8px] leading-tight text-gray-700 font-medium mt-0.5">
-                        {STATUS_SHORT[data.status]}
-                      </span>
+                      <span className={`font-bold text-xs leading-none ${isUntouchedWeekend ? 'text-gray-400' : 'text-gray-900'}`}>{day}</span>
+                      {!isUntouchedWeekend && (
+                        <span className="text-[8px] leading-tight text-gray-700 font-medium mt-0.5">
+                          {STATUS_SHORT[data.status]}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
@@ -468,10 +493,12 @@ export default function EmployeeForm() {
                 {/* Day info */}
                 <div className="flex-1 text-center">
                   <p className="font-semibold text-gray-800">
-                    {selectedDay}. {formatMonthLabel(currentMonth).split(' ')[0]}
+                    {selWeekdayFull}, {selectedDay}. {formatMonthLabel(currentMonth).split(' ')[0]}
                     {holidayName && <span className="ml-1 text-purple-600 text-sm font-normal">🎉 {holidayName}</span>}
                   </p>
-                  <p className="text-xs text-gray-400">{isLocked ? 'Nur Ansicht' : 'Status auswählen'}</p>
+                  <p className="text-xs text-gray-400">
+                    {isLocked ? 'Nur Ansicht' : selIsUntouchedWeekend ? 'Wochenende – kein Eintrag' : 'Status auswählen'}
+                  </p>
                 </div>
 
                 {/* Next day */}
@@ -488,15 +515,30 @@ export default function EmployeeForm() {
                 </button>
               </div>
 
+              {/* Weekend note + clear button */}
+              {selIsWeekend && !isLocked && (
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                  <span className="text-sm text-gray-500 flex-1">
+                    🏖️ Wochenende – normalerweise kein Dienst
+                  </span>
+                  {!selIsUntouchedWeekend && (
+                    <button type="button" onClick={() => clearWeekendDay(selectedDay)}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap">
+                      Eintrag löschen
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Default option */}
               <button type="button" disabled={isLocked}
                 onClick={() => setDayStatus(selectedDay, 'available')}
                 className={`w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition ${
-                  selData.status === 'available'
+                  selData.status === 'available' && !selIsUntouchedWeekend
                     ? 'bg-green-400 border-green-500 text-gray-900'
                     : 'bg-gray-50 border-gray-200 text-gray-500'
                 } ${isLocked ? 'cursor-default' : ''}`}>
-                ✅ Verfügbar (Standard)
+                ✅ Verfügbar
               </button>
 
               {/* Grouped options */}

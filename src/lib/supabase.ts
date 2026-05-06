@@ -109,6 +109,23 @@ export const STATUS_EXCEL_COLOR: Record<Status | 'none', string> = {
 }
 
 export const WEEKDAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+export const WEEKDAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
+
+export function getWeekdayFull(monthStr: string, day: number): string {
+  const [year, month] = monthStr.split('-').map(Number)
+  return WEEKDAY_NAMES_FULL[new Date(year, month - 1, day).getDay()]
+}
+
+export function getWeekendDaysInMonth(monthStr: string): Set<number> {
+  const [year, month] = monthStr.split('-').map(Number)
+  const count = new Date(year, month, 0).getDate()
+  const weekends = new Set<number>()
+  for (let d = 1; d <= count; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (dow === 0 || dow === 6) weekends.add(d)
+  }
+  return weekends
+}
 
 const MONTH_NAMES = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
