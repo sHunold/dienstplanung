@@ -213,7 +213,11 @@ export default function EmployeeForm() {
 
   function setPrio(day: number, prio: number) {
     if (isLocked) return
-    setDays(prev => ({ ...prev, [day]: { ...prev[day], prio } }))
+    setDays(prev => {
+      const current = prev[day]
+      const autoWunschfrei = prio > 0 && weekendDays.has(day) && !touchedDays.has(day)
+      return { ...prev, [day]: { ...current, prio, status: autoWunschfrei ? 'preferred_off' : current.status } }
+    })
     if (prio > 0) setTouchedDays(prev => new Set(prev).add(day))
   }
 
