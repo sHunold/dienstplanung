@@ -147,7 +147,7 @@ export default function AdminDashboard() {
       sheet.addRow([])
       const legendRow = sheet.addRow(['Legende:'])
       legendRow.getCell(1).font = { bold: true }
-      const legendStatuses: Status[] = ['available','preferred_off','part_time_off','vacation','training','overtime_off','no_shift','no_late_shift','preferred_shift']
+      const legendStatuses: Status[] = ['available','preferred_off','part_time_off','vacation','training','overtime_off','no_shift','no_late_shift','late_shift','preferred_shift']
       legendStatuses.forEach((s, i) => {
         const cell = legendRow.getCell(i + 2)
         cell.value = `${STATUS_SHORT[s]} = ${STATUS_LABELS[s]}`
@@ -182,13 +182,6 @@ export default function AdminDashboard() {
 
   // Stats
   const _totalDays = daysInMonth(month); void _totalDays
-  const statsByStatus = entries.reduce(
-    (acc, e) => {
-      acc[e.status] = (acc[e.status] ?? 0) + 1
-      return acc
-    },
-    {} as Record<string, number>,
-  )
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -256,19 +249,6 @@ export default function AdminDashboard() {
             sub="haben eingereicht"
             color="blue"
           />
-          <StatCard
-            label="Verfügbar"
-            value={statsByStatus['available'] ?? 0}
-            sub="Einträge"
-            color="green"
-          />
-          <StatCard
-            label="Freizeit"
-            value={(['preferred_off','part_time_off','vacation','training','overtime_off'] as const)
-              .reduce((s, k) => s + (statsByStatus[k] ?? 0), 0)}
-            sub="Einträge"
-            color="yellow"
-          />
         </div>
 
         {/* Employee manager (collapsible) */}
@@ -296,7 +276,7 @@ export default function AdminDashboard() {
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
             <span className="text-gray-500 font-bold w-full">Legende:</span>
             {(['available','preferred_off','part_time_off','vacation','training','overtime_off',
-              'no_shift','no_late_shift','preferred_shift'] as Status[]).map(s => (
+              'no_shift','no_late_shift','late_shift','preferred_shift'] as Status[]).map(s => (
               <span key={s} className="inline-flex items-center gap-1">
                 <span className={`w-3 h-3 rounded-sm inline-block`}
                   style={{ backgroundColor: `#${STATUS_EXCEL_COLOR[s].slice(2)}` }} />

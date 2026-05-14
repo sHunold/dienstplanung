@@ -43,7 +43,8 @@ const STATUS_ACTIVE_RING: Record<Status, string> = {
   no_shift:        'ring-red-600',
   no_late_shift:   'ring-rose-500',
   normal:          'ring-emerald-500',
-  preferred_shift: 'ring-teal-500',
+  preferred_shift: 'ring-green-700',
+  late_shift:      'ring-indigo-500',
 }
 
 function buildDefaultDays(month: string): Record<number, DayData> {
@@ -482,22 +483,6 @@ export default function EmployeeForm() {
 
           {/* LEFT column: Stats + Prio + Calendar */}
           <div className="space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-green-100 border border-green-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-green-700">{stats.verfuegbar}</p>
-              <p className="text-xs text-green-600 font-medium">Verfügbar</p>
-            </div>
-            <div className="bg-orange-100 border border-orange-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-orange-700">{stats.freizeit}</p>
-              <p className="text-xs text-orange-600 font-medium">Freizeit</p>
-            </div>
-            <div className="bg-blue-100 border border-blue-300 rounded-xl py-2">
-              <p className="text-2xl font-bold text-blue-700">{stats.arbeit}</p>
-              <p className="text-xs text-blue-600 font-medium">Arbeitswunsch</p>
-            </div>
-          </div>
-
           {/* Prio markers overview */}
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -699,7 +684,7 @@ export default function EmployeeForm() {
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Legende</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               {(['available', 'preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off',
-                'no_shift', 'no_late_shift', 'preferred_shift'] as Status[]).map(s => (
+                'no_shift', 'no_late_shift', 'late_shift', 'preferred_shift'] as Status[]).map(s => (
                 <div key={s} className="flex items-center gap-1.5 text-xs text-gray-600">
                   <span className={`w-3 h-3 rounded-sm shrink-0 ${STATUS_BG_CLASS[s]}`} />
                   <span className="font-mono text-gray-400 text-[10px]">{STATUS_SHORT[s]}</span>

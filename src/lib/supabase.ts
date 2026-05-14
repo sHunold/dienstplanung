@@ -6,7 +6,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 export type Status =
-  | 'available'       // Verfügbar (default)
+  | 'available'       // Normal (default)
   | 'preferred_off'   // Wunschfrei
   | 'part_time_off'   // Teilzeitfrei
   | 'vacation'        // Urlaub
@@ -14,8 +14,9 @@ export type Status =
   | 'overtime_off'    // Freizeitausgleich (ÜSTD)
   | 'no_shift'        // Kein Dienst
   | 'no_late_shift'   // Kein Spätdienst
-  | 'normal'          // Normal / Egal
+  | 'normal'          // (legacy)
   | 'preferred_shift' // Wunschdienst
+  | 'late_shift'      // Spätdienst
 
 export interface Employee {
   id: string
@@ -42,8 +43,8 @@ export interface AvailabilityEntry {
   submitted_at: string
 }
 
-export const WEEKEND_PRIO_MAX = 6  // Fr + Sa + So
-export const WEEKDAY_PRIO_MAX = 2  // Mo – Do
+export const WEEKEND_PRIO_MAX = 7  // Fr + Sa + So
+export const WEEKDAY_PRIO_MAX = 6  // Mo – Do
 
 // Fr/Sa/So days in month (for prio assignment)
 export function getWeekendPrioDays(monthStr: string): Set<number> {
@@ -68,6 +69,7 @@ export const STATUS_LABELS: Record<Status, string> = {
   no_late_shift:   'Kein Spätdienst',
   normal:          'Normal / Egal',
   preferred_shift: 'Wunschdienst',
+  late_shift:      'Spätdienst',
 }
 
 export const STATUS_SHORT: Record<Status, string> = {
@@ -81,6 +83,7 @@ export const STATUS_SHORT: Record<Status, string> = {
   no_late_shift:   'KS',
   normal:          'N/E',
   preferred_shift: 'WD',
+  late_shift:      'SD',
 }
 
 // Grouped for the employee form UI
@@ -91,7 +94,7 @@ export const STATUS_GROUPS = [
   },
   {
     label: 'Arbeitsoptionen',
-    statuses: ['no_shift', 'no_late_shift', 'preferred_shift'] as Status[],
+    statuses: ['no_shift', 'no_late_shift', 'late_shift', 'preferred_shift'] as Status[],
   },
 ]
 
@@ -106,7 +109,8 @@ export const STATUS_BG_CLASS: Record<Status, string> = {
   no_shift:        'bg-red-400',
   no_late_shift:   'bg-rose-300',
   normal:          'bg-emerald-300',
-  preferred_shift: 'bg-teal-400',
+  preferred_shift: 'bg-green-700',
+  late_shift:      'bg-indigo-300',
 }
 
 // ARGB hex for Excel export
@@ -120,7 +124,8 @@ export const STATUS_EXCEL_COLOR: Record<Status | 'none', string> = {
   no_shift:        'FFFCA5A5',
   no_late_shift:   'FFFDA4AF',
   normal:          'FF6EE7B7',
-  preferred_shift: 'FF5EEAD4',
+  preferred_shift: 'FF15803D',
+  late_shift:      'FFA5B4FC',
   none:            'FFE5E7EB',
 }
 

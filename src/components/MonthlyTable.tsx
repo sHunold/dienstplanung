@@ -8,6 +8,9 @@ import {
   getWeekday,
 } from '../lib/supabase'
 
+const ARBEITEND_STATUSES = new Set<Status>(['available', 'preferred_shift', 'late_shift', 'no_late_shift', 'no_shift'])
+const FREI_STATUSES = new Set<Status>(['preferred_off', 'part_time_off', 'vacation', 'training', 'overtime_off'])
+
 interface Props {
   employees: Employee[]
   entries: AvailabilityEntry[]
@@ -25,7 +28,8 @@ const PRINT_COLORS: Record<Status | 'none', string> = {
   no_shift:        '#fca5a5',
   no_late_shift:   '#fda4af',
   normal:          '#6ee7b7',
-  preferred_shift: '#5eead4',
+  preferred_shift: '#15803d',
+  late_shift:      '#a5b4fc',
   none:            '#e5e7eb',
 }
 
@@ -40,6 +44,18 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
   }
 
   const sorted = [...employees].sort((a, b) => a.last_name.localeCompare(b.last_name, 'de'))
+
+  // Per-day summary counts
+  const dayCounts = days.map(d => {
+    let arbeitend = 0, frei = 0
+    for (const emp of sorted) {
+      const entry = lookup[emp.id]?.[d]
+      if (!entry) continue
+      if (ARBEITEND_STATUSES.has(entry.status)) arbeitend++
+      else if (FREI_STATUSES.has(entry.status)) frei++
+    }
+    return { arbeitend, frei }
+  })
 
   return (
     <div className="overflow-x-auto rounded-xl shadow">
@@ -98,6 +114,28 @@ export default function MonthlyTable({ employees, entries, month }: Props) {
             </tr>
           )}
         </tbody>
+        <tfoot>
+          <tr className="bg-green-50 border-t-2 border-green-300">
+            <td className="sticky left-0 bg-green-50 z-10 px-3 py-1.5 font-bold text-green-800 text-xs border-r border-green-200">
+              Arbeitend
+            </td>
+            {dayCounts.map(({ arbeitend }, i) => (
+              <td key={i} className="text-center px-0.5 py-1.5 text-xs font-bold text-green-800">
+                {arbeitend > 0 ? arbeitend : '–'}
+              </td>
+            ))}
+          </tr>
+          <tr className="bg-orange-50 border-t border-orange-200">
+            <td className="sticky left-0 bg-orange-50 z-10 px-3 py-1.5 font-bold text-orange-800 text-xs border-r border-orange-200">
+              Frei
+            </td>
+            {dayCounts.map(({ frei }, i) => (
+              <td key={i} className="text-center px-0.5 py-1.5 text-xs font-bold text-orange-800">
+                {frei > 0 ? frei : '–'}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
       </table>
     </div>
   )
